@@ -78,3 +78,14 @@
     (ok true)
   )
 )
+
+;; Helper function to get user balance with default
+(define-private (get-user-balance-amount (user principal))
+  (let 
+    ((balance-opt (map-get? user-balances {user: user})))
+    (if (is-some balance-opt)
+        (get amount (unwrap-panic balance-opt))
+        u0
+    )
+  )
+)
