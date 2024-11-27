@@ -67,3 +67,14 @@
     (ok true)
   )
 )
+
+
+;; Bridge fee management
+(define-public (update-bridge-fee (new-fee uint))
+  (begin
+    (try! (check-is-bridge-owner))
+    (asserts! (< new-fee u100) ERR-INVALID-AMOUNT)
+    (var-set bridge-fee-percentage new-fee)
+    (ok true)
+  )
+)
