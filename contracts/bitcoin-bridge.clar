@@ -28,3 +28,8 @@
   { user: principal }
   { amount: uint }
 )
+
+;; Authorization checks
+(define-read-only (is-bridge-owner (sender principal))
+  (is-eq sender (var-get bridge-owner))
+)
