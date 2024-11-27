@@ -33,3 +33,20 @@
 (define-read-only (is-bridge-owner (sender principal))
   (is-eq sender (var-get bridge-owner))
 )
+
+;; Oracle management
+(define-public (add-oracle (oracle principal))
+  (begin
+    (try! (check-is-bridge-owner))
+    (map-set authorized-oracles oracle true)
+    (ok true)
+  )
+)
+
+(define-public (remove-oracle (oracle principal))
+  (begin
+    (try! (check-is-bridge-owner))
+    (map-set authorized-oracles oracle false)
+    (ok true)
+  )
+)
