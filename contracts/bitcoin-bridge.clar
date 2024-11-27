@@ -68,7 +68,6 @@
   )
 )
 
-
 ;; Bridge fee management
 (define-public (update-bridge-fee (new-fee uint))
   (begin
@@ -181,4 +180,17 @@
     (asserts! (is-eq tx-sender (var-get bridge-owner)) ERR-NOT-AUTHORIZED)
     (ok true)
   )
+)
+
+;; Read-only functions for bridge transparency
+(define-read-only (get-total-locked-bitcoin)
+  (var-get total-locked-bitcoin)
+)
+
+(define-read-only (get-user-balance (user principal))
+  (get-user-balance-amount user)
+)
+
+(define-read-only (is-oracle-authorized (oracle principal))
+  (default-to false (map-get? authorized-oracles oracle))
 )
