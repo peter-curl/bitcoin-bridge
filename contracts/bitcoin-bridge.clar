@@ -50,3 +50,20 @@
     (ok true)
   )
 )
+
+;; Pausing mechanism for emergency scenarios
+(define-public (pause-bridge)
+  (begin
+    (try! (check-is-bridge-owner))
+    (var-set is-bridge-paused true)
+    (ok true)
+  )
+)
+
+(define-public (unpause-bridge)
+  (begin
+    (try! (check-is-bridge-owner))
+    (var-set is-bridge-paused false)
+    (ok true)
+  )
+)
