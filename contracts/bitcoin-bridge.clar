@@ -9,3 +9,9 @@
 (define-constant ERR-BRIDGE-PAUSED (err u4))
 (define-constant ERR-TRANSACTION-ALREADY-PROCESSED (err u5))
 (define-constant ERR-ORACLE-VALIDATION-FAILED (err u6))
+
+;; Storage for bridge configuration and state
+(define-data-var bridge-owner principal tx-sender)
+(define-data-var is-bridge-paused bool false)
+(define-data-var total-locked-bitcoin uint u0)
+(define-data-var bridge-fee-percentage uint u10) ;; 0.1% bridge fee
