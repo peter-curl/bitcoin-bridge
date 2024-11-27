@@ -89,3 +89,36 @@
     )
   )
 )
+
+;; Bitcoin deposit function with oracle validation
+(define-public (deposit-bitcoin 
+  (btc-tx-hash (string-ascii 64))
+  (amount uint)
+  (recipient principal)
+)
+  (let 
+    (
+      (fee (/ (* amount (var-get bridge-fee-percentage)) u1000))
+      (net-amount (- amount fee))
+    )
+    ;; Check bridge is not paused
+    (asserts! (not (var-get is-bridge-paused)) ERR-BRIDGE-PAUSED)
+    
+    ;; Validate transaction hasn't been processed
+    (asserts! (is-none (map-get? processed-transactions { tx-hash: btc-tx-hash })) ERR-TRANSACTION-ALREADY-PROCESSED)
+    
+    ;; Simulate oracle validation (in real implementation, this would call external oracle)
+    (try! (validate-bitcoin-transaction btc-tx-hash amount))
+    
+    ;; Mint wrapped Bitcoin tokens
+    (try! (ft-mint? wrapped-bitcoin net-amount recipient))
+    
+    ;; Mark transaction as processed
+    (map-set processed-transactions { tx-hash: btc-tx-hash } true)
+    
+    ;; Update total locked Bitcoin
+    (var-set total-locked-bitcoin (+ (var-get total-locked-bitcoin) amount))
+    
+    (ok net-amount)
+  )
+)
