@@ -19,3 +19,12 @@
 ;; Oracles configuration
 (define-map authorized-oracles principal bool)
 (define-map processed-transactions { tx-hash: (string-ascii 64) } bool)
+
+;; Wrapped Bitcoin Token (wBTC) representation
+(define-fungible-token wrapped-bitcoin)
+
+;; User balance tracking for wBTC
+(define-map user-balances 
+  { user: principal }
+  { amount: uint }
+)
