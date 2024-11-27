@@ -15,3 +15,7 @@
 (define-data-var is-bridge-paused bool false)
 (define-data-var total-locked-bitcoin uint u0)
 (define-data-var bridge-fee-percentage uint u10) ;; 0.1% bridge fee
+
+;; Oracles configuration
+(define-map authorized-oracles principal bool)
+(define-map processed-transactions { tx-hash: (string-ascii 64) } bool)
