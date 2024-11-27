@@ -9,16 +9,20 @@
 (define-constant ERR-BRIDGE-PAUSED (err u4))
 (define-constant ERR-TRANSACTION-ALREADY-PROCESSED (err u5))
 (define-constant ERR-ORACLE-VALIDATION-FAILED (err u6))
+(define-constant ERR-INVALID-RECIPIENT (err u7))
+(define-constant ERR-MAX-DEPOSIT-EXCEEDED (err u8))
 
 ;; Storage for bridge configuration and state
 (define-data-var bridge-owner principal tx-sender)
 (define-data-var is-bridge-paused bool false)
 (define-data-var total-locked-bitcoin uint u0)
 (define-data-var bridge-fee-percentage uint u10) ;; 0.1% bridge fee
+(define-data-var max-deposit-amount uint u10000000) ;; Configurable max deposit
 
 ;; Oracles configuration
 (define-map authorized-oracles principal bool)
 (define-map processed-transactions { tx-hash: (string-ascii 64) } bool)
+(define-map recipient-whitelist principal bool)
 
 ;; Wrapped Bitcoin Token (wBTC) representation
 (define-fungible-token wrapped-bitcoin)
@@ -38,6 +42,8 @@
 (define-public (add-oracle (oracle principal))
   (begin
     (try! (check-is-bridge-owner))
+    (asserts! (not (is-eq oracle tx-sender)) ERR-NOT-AUTHORIZED)
+    (asserts! (not (is-eq oracle .none)) ERR-INVALID-RECIPIENT)
     (map-set authorized-oracles oracle true)
     (ok true)
   )
@@ -46,6 +52,7 @@
 (define-public (remove-oracle (oracle principal))
   (begin
     (try! (check-is-bridge-owner))
+    (asserts! (not (is-eq oracle .none)) ERR-INVALID-RECIPIENT)
     (map-set authorized-oracles oracle false)
     (ok true)
   )
