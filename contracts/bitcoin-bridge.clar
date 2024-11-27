@@ -174,3 +174,11 @@
     (ok true)
   )
 )
+
+;; Helper function to check bridge owner authorization
+(define-private (check-is-bridge-owner)
+  (begin
+    (asserts! (is-eq tx-sender (var-get bridge-owner)) ERR-NOT-AUTHORIZED)
+    (ok true)
+  )
+)
