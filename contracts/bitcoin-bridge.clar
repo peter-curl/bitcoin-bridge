@@ -122,3 +122,34 @@
     (ok net-amount)
   )
 )
+
+;; Withdrawal function for burning wBTC and releasing Bitcoin
+(define-public (withdraw-bitcoin (amount uint))
+  (let 
+    (
+      (sender tx-sender)
+      (fee (/ (* amount (var-get bridge-fee-percentage)) u1000))
+      (net-amount (- amount fee))
+      (user-balance (get-user-balance-amount sender))
+    )
+    ;; Check bridge is not paused
+    (asserts! (not (var-get is-bridge-paused)) ERR-BRIDGE-PAUSED)
+    
+    ;; Validate sufficient balance
+    (asserts! (>= user-balance amount) ERR-INSUFFICIENT-BALANCE)
+    
+    ;; Burn wBTC tokens
+    (try! (ft-burn? wrapped-bitcoin amount sender))
+    
+    ;; Reduce total locked Bitcoin
+    (var-set total-locked-bitcoin (- (var-get total-locked-bitcoin) amount))
+    
+    ;; Update user balance (in real scenario, this would trigger Bitcoin transfer)
+    (map-set user-balances 
+      {user: sender} 
+      {amount: (- user-balance amount)}
+    )
+    
+    (ok net-amount)
+  )
+)
