@@ -58,6 +58,23 @@
   )
 )
 
+;; Recipient Whitelist Management
+(define-public (add-to-whitelist (recipient principal))
+  (begin
+    (try! (check-is-bridge-owner))
+    (map-set recipient-whitelist recipient true)
+    (ok true)
+  )
+)
+
+(define-public (remove-from-whitelist (recipient principal))
+  (begin
+    (try! (check-is-bridge-owner))
+    (map-set recipient-whitelist recipient false)
+    (ok true)
+  )
+)
+
 ;; Pausing mechanism for emergency scenarios
 (define-public (pause-bridge)
   (begin
@@ -85,6 +102,14 @@
   )
 )
 
+(define-public (update-max-deposit (new-max uint))
+  (begin
+    (try! (check-is-bridge-owner))
+    (var-set max-deposit-amount new-max)
+    (ok true)
+  )
+)
+
 ;; Helper function to get user balance with default
 (define-private (get-user-balance-amount (user principal))
   (let 
@@ -106,23 +131,26 @@
     (
       (fee (/ (* amount (var-get bridge-fee-percentage)) u1000))
       (net-amount (- amount fee))
+      (is-whitelisted (default-to false (map-get? recipient-whitelist recipient)))
     )
-    ;; Check bridge is not paused
-    (asserts! (not (var-get is-bridge-paused)) ERR-BRIDGE-PAUSED)
+    ;; Enhanced Input Validation
+    (asserts! (> amount u0) ERR-INVALID-AMOUNT)
+    (asserts! (<= amount (var-get max-deposit-amount)) ERR-MAX-DEPOSIT-EXCEEDED)
+    (asserts! (not (is-eq recipient tx-sender)) ERR-NOT-AUTHORIZED)
+    (asserts! is-whitelisted ERR-INVALID-RECIPIENT)
     
-    ;; Validate transaction hasn't been processed
+    ;; Existing Validation Checks
+    (asserts! (not (var-get is-bridge-paused)) ERR-BRIDGE-PAUSED)
     (asserts! (is-none (map-get? processed-transactions { tx-hash: btc-tx-hash })) ERR-TRANSACTION-ALREADY-PROCESSED)
     
-    ;; Simulate oracle validation (in real implementation, this would call external oracle)
+    ;; Oracle and Transaction Validation
     (try! (validate-bitcoin-transaction btc-tx-hash amount))
     
-    ;; Mint wrapped Bitcoin tokens
+    ;; Mint Wrapped Bitcoin Tokens
     (try! (ft-mint? wrapped-bitcoin net-amount recipient))
     
-    ;; Mark transaction as processed
+    ;; Mark Transaction and Update State
     (map-set processed-transactions { tx-hash: btc-tx-hash } true)
-    
-    ;; Update total locked Bitcoin
     (var-set total-locked-bitcoin (+ (var-get total-locked-bitcoin) amount))
     
     (ok net-amount)
