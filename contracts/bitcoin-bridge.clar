@@ -2,7 +2,7 @@
 ;; summary: A smart contract for bridging Bitcoin to a wrapped token on the Stacks blockchain.
 ;; description: This contract allows users to deposit Bitcoin and receive wrapped Bitcoin tokens (wBTC) on the Stacks blockchain. It includes functionalities for managing oracles, pausing the bridge, updating bridge fees, and validating Bitcoin transactions. The contract ensures secure and transparent handling of Bitcoin deposits and withdrawals, with mechanisms for emergency scenarios and oracle-based transaction validation.
 
-;; Errors
+;; Enhanced Error Constants
 (define-constant ERR-NOT-AUTHORIZED (err u1))
 (define-constant ERR-INVALID-AMOUNT (err u2))
 (define-constant ERR-INSUFFICIENT-BALANCE (err u3))
@@ -11,39 +11,55 @@
 (define-constant ERR-ORACLE-VALIDATION-FAILED (err u6))
 (define-constant ERR-INVALID-RECIPIENT (err u7))
 (define-constant ERR-MAX-DEPOSIT-EXCEEDED (err u8))
+(define-constant ERR-INVALID-TX-HASH (err u9))
 
-;; Storage for bridge configuration and state
+;; Enhanced Storage and Configuration
 (define-data-var bridge-owner principal tx-sender)
 (define-data-var is-bridge-paused bool false)
 (define-data-var total-locked-bitcoin uint u0)
-(define-data-var bridge-fee-percentage uint u10) ;; 0.1% bridge fee
+(define-data-var bridge-fee-percentage uint u10)
 (define-data-var max-deposit-amount uint u10000000) ;; Configurable max deposit
 
-;; Oracles configuration
+;; Enhanced Oracles and Transaction Tracking
 (define-map authorized-oracles principal bool)
 (define-map processed-transactions { tx-hash: (string-ascii 64) } bool)
 (define-map recipient-whitelist principal bool)
 
-;; Wrapped Bitcoin Token (wBTC) representation
+;; Wrapped Bitcoin Token
 (define-fungible-token wrapped-bitcoin)
 
-;; User balance tracking for wBTC
+;; User balance tracking
 (define-map user-balances 
   { user: principal }
   { amount: uint }
 )
 
-;; Authorization checks
+;; Enhanced Authorization Checks
 (define-read-only (is-bridge-owner (sender principal))
   (is-eq sender (var-get bridge-owner))
 )
 
-;; Oracle management
+;; Validation Helpers
+(define-private (is-valid-principal (addr principal))
+  (and 
+    (not (is-eq addr tx-sender))
+    (not (is-eq addr .none))
+  )
+)
+
+(define-private (is-valid-tx-hash (hash (string-ascii 64)))
+  (and 
+    (not (is-eq hash ""))
+    (> (len hash) u10)  ;; Basic length check
+    ;; Optional: add more sophisticated hash validation if needed
+  )
+)
+
+;; Enhanced Oracle Management
 (define-public (add-oracle (oracle principal))
   (begin
     (try! (check-is-bridge-owner))
-    (asserts! (not (is-eq oracle tx-sender)) ERR-NOT-AUTHORIZED)
-    (asserts! (not (is-eq oracle .none)) ERR-INVALID-RECIPIENT)
+    (asserts! (is-valid-principal oracle) ERR-INVALID-RECIPIENT)
     (map-set authorized-oracles oracle true)
     (ok true)
   )
@@ -52,7 +68,7 @@
 (define-public (remove-oracle (oracle principal))
   (begin
     (try! (check-is-bridge-owner))
-    (asserts! (not (is-eq oracle .none)) ERR-INVALID-RECIPIENT)
+    (asserts! (is-valid-principal oracle) ERR-INVALID-RECIPIENT)
     (map-set authorized-oracles oracle false)
     (ok true)
   )
@@ -62,6 +78,7 @@
 (define-public (add-to-whitelist (recipient principal))
   (begin
     (try! (check-is-bridge-owner))
+    (asserts! (is-valid-principal recipient) ERR-INVALID-RECIPIENT)
     (map-set recipient-whitelist recipient true)
     (ok true)
   )
@@ -70,12 +87,13 @@
 (define-public (remove-from-whitelist (recipient principal))
   (begin
     (try! (check-is-bridge-owner))
+    (asserts! (is-valid-principal recipient) ERR-INVALID-RECIPIENT)
     (map-set recipient-whitelist recipient false)
     (ok true)
   )
 )
 
-;; Pausing mechanism for emergency scenarios
+;; Existing Pause and Fee Management Functions
 (define-public (pause-bridge)
   (begin
     (try! (check-is-bridge-owner))
@@ -92,7 +110,6 @@
   )
 )
 
-;; Bridge fee management
 (define-public (update-bridge-fee (new-fee uint))
   (begin
     (try! (check-is-bridge-owner))
@@ -105,23 +122,14 @@
 (define-public (update-max-deposit (new-max uint))
   (begin
     (try! (check-is-bridge-owner))
+    (asserts! (> new-max u0) ERR-INVALID-AMOUNT)
+    (asserts! (< new-max u100000000) ERR-INVALID-AMOUNT)  ;; Reasonable upper bound
     (var-set max-deposit-amount new-max)
     (ok true)
   )
 )
 
-;; Helper function to get user balance with default
-(define-private (get-user-balance-amount (user principal))
-  (let 
-    ((balance-opt (map-get? user-balances {user: user})))
-    (if (is-some balance-opt)
-        (get amount (unwrap-panic balance-opt))
-        u0
-    )
-  )
-)
-
-;; Bitcoin deposit function with oracle validation
+;; Enhanced Bitcoin Deposit Function
 (define-public (deposit-bitcoin 
   (btc-tx-hash (string-ascii 64))
   (amount uint)
@@ -134,9 +142,10 @@
       (is-whitelisted (default-to false (map-get? recipient-whitelist recipient)))
     )
     ;; Enhanced Input Validation
+    (asserts! (is-valid-tx-hash btc-tx-hash) ERR-INVALID-TX-HASH)
     (asserts! (> amount u0) ERR-INVALID-AMOUNT)
     (asserts! (<= amount (var-get max-deposit-amount)) ERR-MAX-DEPOSIT-EXCEEDED)
-    (asserts! (not (is-eq recipient tx-sender)) ERR-NOT-AUTHORIZED)
+    (asserts! (is-valid-principal recipient) ERR-INVALID-RECIPIENT)
     (asserts! is-whitelisted ERR-INVALID-RECIPIENT)
     
     ;; Existing Validation Checks
@@ -157,37 +166,6 @@
   )
 )
 
-;; Withdrawal function for burning wBTC and releasing Bitcoin
-(define-public (withdraw-bitcoin (amount uint))
-  (let 
-    (
-      (sender tx-sender)
-      (fee (/ (* amount (var-get bridge-fee-percentage)) u1000))
-      (net-amount (- amount fee))
-      (user-balance (get-user-balance-amount sender))
-    )
-    ;; Check bridge is not paused
-    (asserts! (not (var-get is-bridge-paused)) ERR-BRIDGE-PAUSED)
-    
-    ;; Validate sufficient balance
-    (asserts! (>= user-balance amount) ERR-INSUFFICIENT-BALANCE)
-    
-    ;; Burn wBTC tokens
-    (try! (ft-burn? wrapped-bitcoin amount sender))
-    
-    ;; Reduce total locked Bitcoin
-    (var-set total-locked-bitcoin (- (var-get total-locked-bitcoin) amount))
-    
-    ;; Update user balance (in real scenario, this would trigger Bitcoin transfer)
-    (map-set user-balances 
-      {user: sender} 
-      {amount: (- user-balance amount)}
-    )
-    
-    (ok net-amount)
-  )
-)
-
 ;; Oracle transaction validation (mock implementation)
 (define-private (validate-bitcoin-transaction 
   (btc-tx-hash (string-ascii 64))
@@ -199,6 +177,10 @@
         (map-get? authorized-oracles tx-sender)
       ))
     )
+    ;; Validate transaction hash and amount
+    (asserts! (is-valid-tx-hash btc-tx-hash) ERR-INVALID-TX-HASH)
+    (asserts! (> amount u0) ERR-INVALID-AMOUNT)
+    
     ;; Check if caller is an authorized oracle
     (asserts! authorized-validator ERR-NOT-AUTHORIZED)
     
@@ -228,4 +210,15 @@
 
 (define-read-only (is-oracle-authorized (oracle principal))
   (default-to false (map-get? authorized-oracles oracle))
+)
+
+;; Helper function to get user balance with default
+(define-private (get-user-balance-amount (user principal))
+  (let 
+    ((balance-opt (map-get? user-balances {user: user})))
+    (if (is-some balance-opt)
+        (get amount (unwrap-panic balance-opt))
+        u0
+    )
+  )
 )
